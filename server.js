@@ -21,6 +21,7 @@ import { setupHandRaising } from './modules/handRaising.js';
 import { setupScreenSharingControl } from './modules/screenSharingControl.js';
 import { setupParticipantControl } from './modules/participantControl.js';
 import { setupMeetingScheduler } from './modules/meetingScheduler.js';
+import { setupMeetingStatsRoutes, setupMeetingStatsSocket } from './modules/meetingStats.js';
 
 // Fix for __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -78,6 +79,10 @@ const participantControlAPI = setupParticipantControl(app, io);
 
 // Setup meeting scheduler functionality
 const schedulerAPI = setupMeetingScheduler(app, io);
+
+// Setup meeting statistics functionality
+setupMeetingStatsRoutes(app);
+const meetingStatsAPI = setupMeetingStatsSocket(io);
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -223,6 +228,9 @@ io.on('connection', (socket) => {
   // Setup meeting scheduler handlers for this socket
   const { handleDisconnect: handleSchedulerDisconnect } = schedulerAPI.setupSocketHandlers(socket);
   
+  // Setup meeting stats handlers for this socket
+  const { handleDisconnect: handleStatsDisconnect } = meetingStatsAPI.setupSocketHandlers(socket);
+  
   // Override the original disconnect handler to include all cleanup
   const originalDisconnectHandler = socket.listeners('disconnect')[0];
   socket.removeAllListeners('disconnect');
@@ -257,6 +265,9 @@ io.on('connection', (socket) => {
     
     // Handle scheduler cleanup
     handleSchedulerDisconnect();
+    
+    // Handle stats cleanup
+    handleStatsDisconnect();
     
     // Call original disconnect handler if it exists (from call.js)
     if (originalDisconnectHandler) {
@@ -293,6 +304,7 @@ server.listen(PORT, () => {
     console.log('Screen sharing control functionality integrated');
     console.log('Participant control functionality integrated');
     console.log('Meeting scheduler functionality integrated');
+    console.log('Meeting statistics functionality integrated');
     
     // Log environment status
     if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
