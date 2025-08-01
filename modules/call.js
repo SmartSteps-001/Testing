@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { authenticateUser } from './auth.js';
+import { recordMeetingStart, recordMeetingEnd } from './meetingStats.js';
 
 // Fix for __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -666,14 +667,23 @@ export const setupSocketIO = (server) => {
       });
     });
 
-    socket.on('join-as-host', (data) => {
+    socket.on('join-as-host', async (data) => {
       const validation = validateData(data, ['meetingId', 'hostName']);
       if (!validation.isValid) {
         socket.emit('meeting-error', { message: validation.error });
         return;
       }
 
-      const { meetingId, hostName } = data;
+      const { meetingId, hostName, userId } = data;
+      
+      // Record meeting start for statistics
+      try {
+        if (userId) {
+          await recordMeetingStart(userId, meetingId, `Meeting ${meetingId}`, true);
+        }
+      } catch (error) {
+        console.error('Error recording meeting start:', error);
+      }
       
       const meeting = new Meeting(meetingId, socket.id, hostName);
       meetings.set(meetingId, meeting);
@@ -683,6 +693,8 @@ export const setupSocketIO = (server) => {
       socket.join(meetingId);
       
       participants.set(socket.id, { meetingId, isHost: true });
+      socket.currentRoom = meetingId;
+      socket.userId = userId;
       
       socket.emit('joined-meeting', {
         meetingId,
@@ -699,14 +711,14 @@ export const setupSocketIO = (server) => {
       console.log(`Host ${hostName} created meeting ${meetingId}`);
     });
 
-    socket.on('join-meeting', (data) => {
+    socket.on('join-meeting', async (data) => {
       const validation = validateData(data, ['meetingId', 'participantName']);
       if (!validation.isValid) {
         socket.emit('meeting-error', { message: validation.error });
         return;
       }
 
-      const { meetingId, participantName } = data;
+      const { meetingId, participantName, userId } = data;
       const meeting = meetings.get(meetingId);
       
       if (!meeting) {
@@ -722,11 +734,22 @@ export const setupSocketIO = (server) => {
         return;
       }
 
+      // Record meeting start for statistics
+      try {
+        if (userId) {
+          await recordMeetingStart(userId, meetingId, `Meeting ${meetingId}`, false);
+        }
+      } catch (error) {
+        console.error('Error recording meeting start:', error);
+      }
+
       meeting.addParticipant(socket.id, participantName);
       
       socket.join(meetingId);
       
       participants.set(socket.id, { meetingId, isHost: false });
+      socket.currentRoom = meetingId;
+      socket.userId = userId;
       
       socket.emit('joined-meeting', {
         meetingId,
@@ -1626,6 +1649,15 @@ export const setupSocketIO = (server) => {
       const participantInfo = participants.get(socket.id);
       
       console.log(`User disconnected: ${socket.id}, reason: ${reason}`);
+      
+      // Record meeting end for statistics
+      if (socket.currentRoom && socket.userId) {
+        const meeting = meetings.get(socket.currentRoom);
+        const participantCount = meeting ? meeting.participants.size : 1;
+        
+        recordMeetingEnd(socket.userId, socket.currentRoom, participantCount)
+          .catch(error => console.error('Error recording meeting end:', error));
+      }
       
       if (participantInfo) {
         const meeting = meetings.get(participantInfo.meetingId);
