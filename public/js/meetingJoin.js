@@ -647,8 +647,10 @@ class WebRTCManager {
       class ParticipantMeeting {
         constructor() {
           this.socket = io();
+          window.socket = this.socket; // Make socket globally available for stats
           this.meetingId = window.location.pathname.split('/').pop();
           this.userName = '';
+          this.userId = null;
           this.isHost = false;
           this.isCoHost = false;
           this.participants = new Map();
@@ -779,6 +781,8 @@ class WebRTCManager {
             const data = await response.json();
             if (data.user) {
               this.userName = data.user.name;
+              this.userId = data.user.id;
+              window.currentUserId = this.userId; // Set for stats tracking
             } else {
               window.location.href = '/login';
             }
@@ -1107,7 +1111,8 @@ class WebRTCManager {
         joinMeeting() {
           this.socket.emit('join-meeting', {
             meetingId: this.meetingId,
-            participantName: this.userName
+            participantName: this.userName,
+            userId: this.userId
           });
         }
 
@@ -1748,6 +1753,3 @@ class WebRTCManager {
           }
         }, 3000); // Wait 3 seconds for everything to load
       });
-
-      
-      
