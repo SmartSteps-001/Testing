@@ -400,8 +400,10 @@ class WebRTCManager {
 class HostMeeting {
   constructor() {
     this.socket = io();
+    window.socket = this.socket; // Make socket globally available for stats
     this.meetingId = window.location.pathname.split('/').pop();
     this.userName = '';
+    this.userId = null;
     this.isHost = true;
     this.participants = new Map();
     this.currentView = 'sidebar';
@@ -476,6 +478,8 @@ class HostMeeting {
       const data = await response.json();
       if (data.user) {
         this.userName = data.user.name;
+        this.userId = data.user.id;
+        window.currentUserId = this.userId; // Set for stats tracking
       } else {
         window.location.href = '/login';
       }
